@@ -17,7 +17,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   Hive.registerAdapter(MockResearchAdapter());
-  var box = await Hive.openBox('app_data');
+  var _ = await Hive.openBox('app_data');
   // await box.clear(); // سطر واحد لحذف جميع البيانات من Hive عند بدء التطبيق
   runApp(const StudentManagement());
 }
@@ -42,7 +42,8 @@ class StudentManagement extends StatelessWidget {
         ),
         BlocProvider<DistributionCubit>(
           create: (context) => DistributionCubit(
-            uploadCubit: BlocProvider.of<UploadCubit>(context), // يعتمد على UploadCubit
+            uploadCubit: BlocProvider.of<UploadCubit>(context),
+            collegesCubit: BlocProvider.of<CollegesCubit>(context),
           ),
         ),
         BlocProvider<SearchCubit>(
@@ -110,12 +111,12 @@ class _MainScreenState extends State<MainScreen> {
                       end: Alignment.bottomCenter,
                       colors: [
                         const Color(0xFF1E3A8A),
-                        const Color(0xFF2B4C9B).withOpacity(0.9),
+                        const Color(0xFF2B4C9B).withValues( blue: 0.9),
                       ],
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(blue: 0.2),
                         blurRadius: 10,
                         offset: const Offset(2, 0),
                       ),

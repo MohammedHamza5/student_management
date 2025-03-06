@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import '../cubits/colleges_cubit.dart';
+import '../cubits/colleges_state.dart';
 import '../cubits/distribution_cubit.dart';
 import '../cubits/distribution_state.dart';
 import '../cubits/stats_cubit.dart';
@@ -56,11 +57,13 @@ class _DistributionScreenState extends State<DistributionScreen> {
               gender: "الذكور",
               distributionCubit: widget.distributionCubit,
               statsCubit: widget.statsCubit,
+              collegesCubit: widget.collegesCubit,
             ),
             DistributionTab(
               gender: "الإناث",
               distributionCubit: widget.distributionCubit,
               statsCubit: widget.statsCubit,
+              collegesCubit: widget.collegesCubit,
             ),
           ],
         ),
@@ -73,12 +76,14 @@ class DistributionTab extends StatefulWidget {
   final String gender;
   final DistributionCubit distributionCubit;
   final StatsCubit statsCubit;
+  final CollegesCubit collegesCubit;
 
   const DistributionTab({
     super.key,
     required this.gender,
     required this.distributionCubit,
     required this.statsCubit,
+    required this.collegesCubit,
   });
 
   @override
@@ -91,12 +96,12 @@ class _DistributionTabState extends State<DistributionTab> {
   List<Map<String, String>> filteredDistribution = [];
   bool isLoading = false;
 
-  Future<void> _distributeResearches(int totalStudents, int totalResearches) async {
+  Future<void> _distributeResearches() async {
     setState(() {
       isLoading = true;
     });
 
-    widget.distributionCubit.distributeResearches(totalStudents, totalResearches, widget.gender);
+    widget.distributionCubit.distributeResearches(widget.gender);
 
     await Future.delayed(const Duration(milliseconds: 100));
     final state = widget.distributionCubit.state;
@@ -194,10 +199,6 @@ class _DistributionTabState extends State<DistributionTab> {
           : widget.gender == "الذكور"
           ? (widget.statsCubit.state as StatsUpdated).researchesMale
           : (widget.statsCubit.state as StatsUpdated).researchesFemale;
-
-      print('Total Researches Uploaded: $totalResearches');
-      print('Distributed Researches: ${researchToSerials.length}');
-      print('Current Distribution Length: ${currentDistribution.length}');
 
       final fontData = await rootBundle.load('assets/fonts/Cairo-Regular.ttf');
       final font = pw.Font.ttf(fontData.buffer.asByteData());
@@ -486,7 +487,7 @@ class _DistributionTabState extends State<DistributionTab> {
 
   @override
   Widget build(BuildContext context) {
-    final totalStudents = widget.statsCubit.state is StatsInitial
+    final _ = widget.statsCubit.state is StatsInitial
         ? widget.gender == "الذكور"
         ? (widget.statsCubit.state as StatsInitial).male
         : (widget.statsCubit.state as StatsInitial).female
@@ -502,6 +503,15 @@ class _DistributionTabState extends State<DistributionTab> {
         ? (widget.statsCubit.state as StatsUpdated).researchesMale
         : (widget.statsCubit.state as StatsUpdated).researchesFemale;
 
+    // حساب أكبر عدد طلاب في كلية واحدة للجنس المحدد (للتحقق فقط، لن نستخدمه مباشرة)
+    final colleges = widget.collegesCubit.state is CollegesInitial
+        ? (widget.collegesCubit.state as CollegesInitial).colleges
+        : (widget.collegesCubit.state as CollegesUpdated).colleges;
+    final maxStudentsInCollege = colleges
+        .where((college) => college.gender == widget.gender)
+        .map((college) => college.students)
+        .fold<int>(0, (max, current) => max > current ? max : current);
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -514,11 +524,12 @@ class _DistributionTabState extends State<DistributionTab> {
                   onPressed: isLoading || currentDistribution.isNotEmpty
                       ? null
                       : () async {
-                    if (totalResearches > 0 && totalStudents > 0) {
-                      await _distributeResearches(totalStudents, totalResearches);
+                    if (totalResearches > 0 && maxStudentsInCollege > 0) {
+                      await _distributeResearches();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("يرجى رفع الأبحاث أولاً وإضافة طلاب قبل التوزيع")),
+                        const SnackBar(
+                            content: Text("يرجى رفع الأبحاث أولاً وإضافة طلاب قبل التوزيع")),
                       );
                     }
                   },

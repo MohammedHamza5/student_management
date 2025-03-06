@@ -1,12 +1,15 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive/hive.dart';
+import 'colleges_state.dart';
 import 'distribution_state.dart';
 import 'upload_cubit.dart';
+import 'colleges_cubit.dart';
 
 class DistributionCubit extends Cubit<DistributionState> {
   final UploadCubit uploadCubit;
+  final CollegesCubit collegesCubit;
 
-  DistributionCubit({required this.uploadCubit})
+  DistributionCubit({required this.uploadCubit, required this.collegesCubit})
       : super(DistributionInitial({"male": [], "female": []})) {
     _loadDistribution();
   }
@@ -14,11 +17,7 @@ class DistributionCubit extends Cubit<DistributionState> {
   final Box _box = Hive.box('app_data');
 
   void _loadDistribution() {
-    final rawDistribution = _box.get(
-      'distribution',
-      defaultValue: {"male": [], "female": []},
-    );
-
+    final rawDistribution = _box.get('distribution', defaultValue: {"male": [], "female": []});
     final Map<String, List<Map<String, String>>> typedDistribution = {};
 
     if (rawDistribution is Map) {
@@ -53,40 +52,39 @@ class DistributionCubit extends Cubit<DistributionState> {
     emit(DistributionSuccess(typedDistribution));
   }
 
-  void distributeResearches(int totalStudents, int totalResearches, String gender) {
+  void distributeResearches(String gender) {
     final researches = gender == "الذكور" ? uploadCubit.researchesMale : uploadCubit.researchesFemale;
-    if (researches.isEmpty || totalStudents <= 0) {
+    final colleges = collegesCubit.state is CollegesInitial
+        ? (collegesCubit.state as CollegesInitial).colleges
+        : (collegesCubit.state as CollegesUpdated).colleges;
+
+    // حساب أكبر عدد طلاب في كلية واحدة للجنس المحدد
+    final maxStudentsInCollege = colleges
+        .where((college) => college.gender == gender)
+        .map((college) => college.students)
+        .fold<int>(0, (max, current) => max > current ? max : current);
+
+    if (researches.isEmpty || maxStudentsInCollege <= 0) {
       emit(DistributionFailure("لا توجد أبحاث كافية أو عدد طلاب غير صالح"));
       return;
     }
 
-
     final distribution = <Map<String, String>>[];
     final shuffledResearches = researches.toList()..shuffle();
 
-    // توليد أرقام مسلسلة لجميع الطلاب
-    final serialNumbers = List.generate(totalStudents, (index) => (index + 1).toString())..shuffle();
+    // توليد أرقام مسلسلة بناءً على أكبر كلية
+    final serialNumbers = List.generate(maxStudentsInCollege, (index) => (index + 1).toString())..shuffle();
 
-    // الحد الأدنى للطلاب لكل بحث
-    const minStudentsPerResearch = 2;
-
-    // حساب عدد الأبحاث التي يمكن استخدامها مع الحد الأدنى
-    final maxPossibleResearches = totalStudents ~/ minStudentsPerResearch;
-    final usableResearches = shuffledResearches.length > maxPossibleResearches
-        ? maxPossibleResearches
-        : shuffledResearches.length;
-
-    // عدد الطلاب لكل بحث (مع ضمان الحد الأدنى)
-    final studentsPerResearch = (totalStudents / usableResearches).ceil();
-
-    // توزيع جميع الطلاب على الأبحاث مع ضمان الحد الأدنى
-    for (int i = 0; i < totalStudents; i++) {
-      final researchIndex = (i ~/ studentsPerResearch) % usableResearches;
+    // توزيع الأبحاث على أكبر عدد طلاب في كلية واحدة
+    for (int i = 0; i < maxStudentsInCollege; i++) {
+      final researchIndex = i % shuffledResearches.length;
       distribution.add({
         "serial": serialNumbers[i],
         "research": shuffledResearches[researchIndex].title,
       });
     }
+
+    final _ = distribution.map((e) => e["research"]).toSet().length;
 
     final rawDistribution = _box.get('distribution', defaultValue: {"male": [], "female": []});
     final Map<String, List<Map<String, String>>> currentDistributions = {};
@@ -146,10 +144,7 @@ class DistributionCubit extends Cubit<DistributionState> {
 
   void resetDistribution(String gender) {
     final rawDistribution = _box.get('distribution', defaultValue: {"male": [], "female": []});
-    final Map<String, List<Map<String, String>>> currentDistributions = {
-      "male": [],
-      "female": [],
-    };
+    final Map<String, List<Map<String, String>>> currentDistributions = {"male": [], "female": []};
 
     if (rawDistribution is Map) {
       rawDistribution.forEach((key, value) {
